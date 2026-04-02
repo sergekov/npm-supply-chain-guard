@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "preinstall": "bash scripts/npm-security-guard.sh",
+    "postinstall": "bash scripts/npm-security-guard.sh",
     "prepare": "bash scripts/install-git-hooks.sh",
     "security:check": "bash scripts/npm-security-guard.sh",
     "security:audit": "pnpm audit --audit-level=critical"

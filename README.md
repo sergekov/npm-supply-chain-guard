@@ -246,7 +246,7 @@ strategy:
 
 ### Reactive Layer (blocklist)
 
-`scripts/npm-security-guard.sh` scans lock files (`package-lock.json` and `pnpm-lock.yaml`) and `node_modules/` for known-malicious packages. It supports both npm and pnpm lockfile formats. It runs automatically on every `pnpm install` via the `preinstall` hook, explicitly via `pnpm run security:check`, and through CI.
+`scripts/npm-security-guard.sh` scans lock files (`package-lock.json` and `pnpm-lock.yaml`) and `node_modules/` for known-malicious packages. It supports both npm and pnpm lockfile formats. It runs automatically on every `pnpm install` via `preinstall` (lock file scan before packages are written) and `postinstall` (node_modules scan after packages are written) hooks, explicitly via `pnpm run security:check`, and through CI.
 
 ### Git Pre-Commit Hook
 
