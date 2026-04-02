@@ -1,6 +1,6 @@
 # npm-supply-chain-guard
 
-Drop-in protection against npm supply chain attacks. Pre-configured for the **axios@1.14.1 compromise** (2026-03-30) and extensible for future threats.
+Prevention-first protection against npm supply chain attacks. Uses **pnpm deny-by-default scripts**, **package age gating**, **exotic dependency blocking**, and an extensible reactive blocklist. Pre-configured for the **axios@1.14.1 compromise** (2026-03-30) and extensible for future threats.
 
 ## What Happened
 
@@ -16,26 +16,44 @@ On March 30, 2026, the axios npm maintainer's account was compromised. A malicio
 
 **Recommended:** Use native `fetch()` instead of axios (available since Node.js 18)
 
+## Why Prevention Matters
+
+A reactive blocklist only catches **known** threats. By the time you add a package to the blocklist, every developer who ran `npm install` has already executed the malicious code on their machine. Their SSH keys, AWS credentials, and session tokens are already exfiltrated.
+
+The axios@1.14.1 attack had an **18-hour window** between publication and detection. During that window, blocklists were useless.
+
+Prevention-first means your machine is protected **before** the threat is identified:
+
+- **Deny-by-default scripts** — malicious postinstall scripts never execute
+- **Package age gating** — newly published packages (< 7 days) are rejected automatically
+- **Exotic dependency blocking** — git repos and tarball URLs in transitive deps are blocked
+
+The reactive blocklist remains as a secondary layer for known threats.
+
 ## Protection Layers
 
-This guard provides **4 layers of defense**:
-
-| Layer | When It Fires | What It Catches |
-|-------|---------------|-----------------|
-| **npm preinstall** | Before `npm install` writes to disk | Blocked packages in `package-lock.json` |
-| **npm postinstall** | After `npm install` completes | Malicious packages in `node_modules/` |
-| **Git pre-commit** | Before `git commit` | Blocked packages in staged `package.json` / `package-lock.json` |
-| **CI/CD workflow** | On every PR and push | Lock file scan + post-install scan + `npm audit` |
+| # | Layer | Mechanism | Protects Machine? | Type |
+|---|-------|-----------|-------------------|------|
+| 1 | Script execution | pnpm deny-by-default + `onlyBuiltDependenciesFile` | **Yes** | Prevention |
+| 2 | Package age gate | pnpm `minimumReleaseAge` (7 days) | **Yes** | Prevention |
+| 3 | Exotic dep blocking | pnpm `blockExoticSubdeps: true` | **Yes** | Prevention |
+| 4 | Dynamic analysis | Socket CLI (`socket pnpm install`) | **Yes** | Prevention |
+| 5 | Network firewall | Little Snitch / LuLu (recommended, not bundled) | **Yes** | Exfiltration defense |
+| 6 | C2 domain block | `/etc/hosts` (documented below) | **Yes** | Exfiltration defense |
+| 7 | Reactive blocklist | `scripts/blocklist.conf` + guard + pre-commit + CI | Partially | Reactive |
+| 8 | Audit | `pnpm audit --audit-level=critical` | Partially | Reactive |
 
 ## Quick Start
 
-### Option A: Copy into your project (recommended)
+### Option A: Copy into your project (pnpm — recommended)
 
 ```bash
 # Clone this repo
 git clone https://github.com/sergekov/npm-supply-chain-guard.git
 
 # Copy the guard files into your project
+cp npm-supply-chain-guard/pnpm-workspace.yaml your-project/
+cp npm-supply-chain-guard/.onlyBuiltDependencies.json your-project/
 cp npm-supply-chain-guard/.npmrc your-project/
 cp -r npm-supply-chain-guard/scripts/ your-project/scripts/
 cp -r npm-supply-chain-guard/.github/ your-project/.github/
@@ -43,48 +61,97 @@ cp -r npm-supply-chain-guard/.github/ your-project/.github/
 # Make scripts executable
 chmod +x your-project/scripts/*.sh
 
-# Merge the package.json scripts into your existing package.json
-# Add these to your "scripts" section:
+# Merge the package.json scripts into your existing package.json:
+#   "preinstall": "bash scripts/npm-security-guard.sh",
+#   "prepare": "bash scripts/install-git-hooks.sh",
+#   "security:check": "bash scripts/npm-security-guard.sh",
+#   "security:audit": "pnpm audit --audit-level=critical"
+
+# Install with pnpm (deny-by-default is active immediately)
+cd your-project && pnpm install
+```
+
+**Important:** `.onlyBuiltDependencies.json` ships with common examples (`esbuild`, `sharp`). Replace these with packages your project actually uses that need postinstall scripts (native addons, etc.). Only listed packages are allowed to run lifecycle scripts.
+
+### Option B: Copy into your project (npm fallback)
+
+If you cannot migrate to pnpm, the reactive blocklist and CI workflow still work with npm:
+
+```bash
+cp npm-supply-chain-guard/.npmrc your-project/
+cp -r npm-supply-chain-guard/scripts/ your-project/scripts/
+cp -r npm-supply-chain-guard/.github/ your-project/.github/
+chmod +x your-project/scripts/*.sh
+
+# Add lifecycle hooks to your package.json:
 #   "preinstall": "bash scripts/npm-security-guard.sh",
 #   "postinstall": "bash scripts/npm-security-guard.sh",
 #   "prepare": "bash scripts/install-git-hooks.sh"
 ```
 
-### Option B: Start a new project with protection built in
+Note: With npm, you lose layers 1-3 (deny-by-default scripts, age gating, exotic dep blocking). The guard script and CI workflow still provide reactive protection.
 
-```bash
-git clone https://github.com/sergekov/npm-supply-chain-guard.git my-project
-cd my-project
-npm install  # triggers preinstall guard + auto-installs git hooks
+### Option C: Monorepo setup
+
+For monorepos with multiple package directories, update `pnpm-workspace.yaml`:
+
+```yaml
+packages:
+  - 'packages/*'
+  - 'apps/*'
 ```
 
-### Option C: Add to a monorepo
-
-For monorepos with multiple package directories, update the CI workflow matrix:
+And update the CI workflow matrix in `.github/workflows/supply-chain-security-audit.yml`:
 
 ```yaml
 strategy:
   matrix:
     directory:
-      - frontend
-      - backend/node
-      - packages/api
+      - packages/frontend
+      - packages/backend
+      - apps/web
 ```
 
-And wire the guard in each sub-package's `package.json`:
+## Socket CLI
 
-```json
-{
-  "scripts": {
-    "preinstall": "bash ../../scripts/npm-security-guard.sh",
-    "postinstall": "bash ../../scripts/npm-security-guard.sh"
-  }
-}
+[Socket](https://socket.dev) provides dynamic analysis of npm packages before installation. It detects:
+
+- Network access in install scripts
+- Filesystem access outside `node_modules`
+- Obfuscated code and encoded payloads
+- Known malware signatures
+
+### Usage
+
+```bash
+# Install Socket CLI
+npm install -g @socketsecurity/cli
+
+# Scan before installing (replaces pnpm install)
+socket pnpm install
+
+# Generate a report
+npx @socketsecurity/cli report create --view
 ```
 
-Adjust the relative path (`../` or `../../`) based on directory depth.
+Socket CLI is included in the CI workflow with `continue-on-error: true` — it runs as an advisory check and does not block the pipeline by default.
 
-## Block the C2 Domain (Recommended)
+## Network Protection
+
+Supply chain attacks need to **exfiltrate** stolen credentials. An outbound firewall on your development machine adds a critical defense layer.
+
+### macOS
+
+- **[Little Snitch](https://www.obdev.at/products/littlesnitch/index.html)** ($49) — enterprise-grade, per-process outbound firewall with connection alerts
+- **[LuLu](https://objective-see.org/products/lulu.html)** (free, open source) — lightweight outbound firewall by Objective-See
+
+Both will alert you when `node` or any child process attempts to connect to an unknown domain — exactly what the axios RAT does when exfiltrating credentials to `sfrclak.com`.
+
+### Linux
+
+Use `iptables` or `nftables` rules to restrict outbound connections from Node.js processes to known-good destinations.
+
+## Block the C2 Domain
 
 Add the attacker's command-and-control server to your `/etc/hosts`:
 
@@ -118,11 +185,9 @@ If any of these return results, your machine may be compromised. Disconnect from
 
 ## Extending the Guard
 
-All blocked packages are defined in a single file: `scripts/blocklist.conf`. Both the npm guard and the git pre-commit hook source this file — edit once, both are updated.
+### Adding Blocked Packages
 
-### Adding a New Blocked Package
-
-Edit `scripts/blocklist.conf`:
+Edit `scripts/blocklist.conf` (single source of truth — shared by the guard script, pre-commit hook, and CI workflow):
 
 ```bash
 BLOCKED_PACKAGES=(
@@ -131,7 +196,7 @@ BLOCKED_PACKAGES=(
 )
 ```
 
-### Adding a New Blocked Version
+### Adding Blocked Versions
 
 ```bash
 BLOCKED_VERSIONS=(
@@ -140,9 +205,23 @@ BLOCKED_VERSIONS=(
 )
 ```
 
+### Allowing Build Scripts
+
+If a package needs to run postinstall scripts (native addons like `esbuild`, `sharp`, `better-sqlite3`), add it to `.onlyBuiltDependencies.json`:
+
+```json
+[
+  "esbuild",
+  "sharp",
+  "better-sqlite3"
+]
+```
+
+Only packages in this file are allowed to execute lifecycle scripts. Everything else is blocked by pnpm's deny-by-default policy.
+
 ### CI Workflow: Adding Package Directories
 
-Update `.github/workflows/npm-security-audit.yml`:
+Update `.github/workflows/supply-chain-security-audit.yml`:
 
 ```yaml
 strategy:
@@ -155,17 +234,32 @@ strategy:
 
 ## How It Works
 
-### npm Lifecycle Hooks
+### Prevention Layer (pnpm)
 
-The root `package.json` registers `preinstall` and `postinstall` scripts that run `scripts/npm-security-guard.sh` on every `npm install`. The preinstall phase catches malicious packages in `package-lock.json` before they're installed. The postinstall phase scans `node_modules/` for anything that slipped through.
+`pnpm-workspace.yaml` configures three native security features:
+
+1. **`onlyBuiltDependenciesFile`** — points to `.onlyBuiltDependencies.json`, an allowlist of packages permitted to run lifecycle scripts. All other packages have install/postinstall scripts silently disabled. This is the single most effective defense — the axios RAT's postinstall script would never execute.
+
+2. **`minimumReleaseAge: 10080`** — rejects any package version published less than 7 days ago. The axios@1.14.1 attack had an 18-hour staging window; this policy blocks it outright.
+
+3. **`blockExoticSubdeps: true`** — prevents transitive dependencies from pulling in git repos or tarball URLs, closing a class of dependency confusion attacks.
+
+### Reactive Layer (blocklist)
+
+`scripts/npm-security-guard.sh` scans lock files (`package-lock.json` and `pnpm-lock.yaml`) and `node_modules/` for known-malicious packages. It supports both npm and pnpm lockfile formats. It runs automatically on every `pnpm install` via the `preinstall` hook, explicitly via `pnpm run security:check`, and through CI.
 
 ### Git Pre-Commit Hook
 
-`scripts/install-git-hooks.sh` runs automatically via the npm `prepare` lifecycle (after `npm install`). It installs a git pre-commit hook that scans **staged content** (not the working tree) of `package.json` and `package-lock.json` files for blocked packages. This prevents committing malicious dependencies even if the npm guard is bypassed.
+`scripts/install-git-hooks.sh` runs automatically via the `prepare` lifecycle (after `pnpm install`). It installs a git pre-commit hook that scans **staged content** (not the working tree) of `package.json`, `package-lock.json`, and `pnpm-lock.yaml` files for blocked packages. This prevents committing malicious dependencies even if other guards are bypassed.
 
 ### CI/CD Workflow
 
-The GitHub Actions workflow runs on PRs and pushes affecting package files. It performs a lock file scan before installation, runs `npm ci`, then does a post-install `node_modules` scan, and finally runs `npm audit --audit-level=critical`.
+The GitHub Actions workflow runs on PRs and pushes affecting package files. It:
+1. Scans lock files for blocked packages (both pnpm and npm formats)
+2. Installs with `pnpm install --frozen-lockfile`
+3. Runs the post-install security scan
+4. Runs `pnpm audit --audit-level=critical`
+5. Runs Socket CLI analysis (advisory)
 
 ## IOC Watchlist
 
@@ -180,10 +274,29 @@ Indicators of Compromise for the axios@1.14.1 attack:
 | `%PROGRAMDATA%\wt.exe` | File (Windows) | RAT persistence artifact |
 | `plain-crypto-js` | npm Package | Malicious dependency containing the RAT |
 
+## Why pnpm?
+
+| Capability | npm | pnpm v10+ |
+|-----------|-----|-----------|
+| Lifecycle scripts | All enabled by default | **All disabled by default** |
+| Per-package script allowlist | Not supported (binary on/off) | `onlyBuiltDependenciesFile` / `allowBuilds` |
+| Package age gate | `min-release-age` (npm 11+ only) | `minimumReleaseAge` in `pnpm-workspace.yaml` |
+| Provenance trust policy | Not supported | `trustPolicy: no-downgrade` |
+| Git dependency bypass (PackageGate) | **Unfixed** ("works as expected") | **Patched in pnpm v10** |
+| Exotic transitive dep blocking | Not supported | `blockExoticSubdeps: true` |
+| Lockfile injection resistance | Requires separate `lockfile-lint` tool | Lockfile format inherently resistant |
+
+For more on npm security risks, see Liran Tal's [npm security best practices](https://github.com/lirantal/npm-security-best-practices).
+
 ## References
 
-- [ITNews: Supply chain attack hits 300-million-download axios npm package](https://www.itnews.com.au/news/supply-chain-attack-hits-300-million-download-axios-npm-package-624699)
+- [pnpm Supply Chain Security](https://pnpm.io/supply-chain-security)
+- [Socket.dev — Introducing Safe npm](https://socket.dev/blog/introducing-safe-npm)
+- [Liran Tal — npm Security Best Practices](https://github.com/lirantal/npm-security-best-practices)
+- [PackageGate — Zero-days in JS Package Managers](https://www.koi.ai/blog/packagegate-6-zero-days-in-js-package-managers-but-npm-wont-act)
+- [CISA Alert — npm Ecosystem Supply Chain Compromise](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem)
+- [ITNews — Supply Chain Attack Hits axios npm Package](https://www.itnews.com.au/news/supply-chain-attack-hits-300-million-download-axios-npm-package-624699)
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) file.
+Apache License 2.0 — See [LICENSE](LICENSE) file.

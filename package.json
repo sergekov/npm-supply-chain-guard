@@ -1,12 +1,14 @@
 {
   "name": "npm-supply-chain-guard",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Drop-in protection against npm supply chain attacks. Pre-configured for the axios@1.14.1 compromise (2026-03-30).",
+  "description": "Prevention-first protection against npm supply chain attacks. Uses pnpm deny-by-default scripts, package age gating, and extensible blocklist.",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "preinstall": "bash scripts/npm-security-guard.sh",
-    "postinstall": "bash scripts/npm-security-guard.sh",
-    "prepare": "bash scripts/install-git-hooks.sh"
+    "prepare": "bash scripts/install-git-hooks.sh",
+    "security:check": "bash scripts/npm-security-guard.sh",
+    "security:audit": "pnpm audit --audit-level=critical"
   },
   "engines": {
     "node": ">=18"

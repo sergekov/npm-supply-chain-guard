@@ -1,0 +1,16 @@
+packages:
+  - '.'
+
+# Supply chain security (pnpm v10+)
+
+# Allowlist for packages permitted to run lifecycle scripts.
+# All other packages have scripts disabled by default.
+onlyBuiltDependenciesFile: .onlyBuiltDependencies.json
+
+# Reject packages published less than 7 days ago.
+# The axios@1.14.1 attack had an 18-hour staging window — this blocks it.
+minimumReleaseAge: 10080  # in minutes (= 7 days)
+
+# Block transitive dependencies from using git repos or tarball URLs.
+# Prevents dependency confusion and exotic subdependency attacks.
+blockExoticSubdeps: true
