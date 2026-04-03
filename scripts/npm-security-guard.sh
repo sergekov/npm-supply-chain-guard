@@ -73,9 +73,9 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
     fi
   fi
 
-  # Check pnpm-lock.yaml format (uses pkg@ver: as YAML key)
+  # Check pnpm-lock.yaml format (pkg@ver: in packages, pkg@ver(peer): in snapshots)
   if [ -f "pnpm-lock.yaml" ]; then
-    if grep -Fq "${pkg}@${ver}:" pnpm-lock.yaml 2>/dev/null; then
+    if grep -Eq "${pkg}@${ver}[:(]" pnpm-lock.yaml 2>/dev/null; then
       echo "SECURITY ALERT: ${pkg}@${ver} is compromised! Found in pnpm-lock.yaml."
       echo "Remove or update this dependency to a safe version."
       exit 1

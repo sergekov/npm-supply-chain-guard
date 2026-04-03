@@ -58,7 +58,7 @@ while IFS= read -r file; do
 
     # Check npm package-lock.json format (node_modules key)
     # -A3: "version" field appears within 3 lines of key in npm lockfile v2/v3 format.
-    if echo "$STAGED_CONTENT" | grep -Fq "\"node_modules/${pkg}\""; then
+    if [[ "$file" == *lock.json ]] && echo "$STAGED_CONTENT" | grep -Fq "\"node_modules/${pkg}\""; then
       if echo "$STAGED_CONTENT" | grep -FA3 "\"node_modules/${pkg}\"" | grep -Fq "\"version\": \"${ver}\""; then
         echo "SECURITY ALERT: Compromised ${pkg}@${ver} found in staged file: ${file}"
         echo "Commit rejected. Use a safe version or remove the dependency."
@@ -66,8 +66,8 @@ while IFS= read -r file; do
       fi
     fi
 
-    # Check pnpm-lock.yaml format (uses pkg@ver: as YAML key)
-    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Fq "${pkg}@${ver}:"; then
+    # Check pnpm-lock.yaml format (pkg@ver: in packages, pkg@ver(peer): in snapshots)
+    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Eq "${pkg}@${ver}[:(]"; then
       echo "SECURITY ALERT: Compromised ${pkg}@${ver} found in staged file: ${file}"
       echo "Commit rejected. Use a safe version or remove the dependency."
       exit 1
