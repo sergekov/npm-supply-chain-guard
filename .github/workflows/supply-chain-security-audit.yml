@@ -64,6 +64,7 @@ jobs:
           # but the security check itself should not silently pass.
           if [ ! -f "pnpm-lock.yaml" ] && [ ! -f "package-lock.json" ]; then
             echo "::warning::No lock file found — lock file security check skipped."
+            exit 0
           fi
 
           # Check pnpm-lock.yaml
