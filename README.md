@@ -37,7 +37,7 @@ The reactive blocklist remains as a secondary layer for known threats.
 | 1 | Script execution | pnpm deny-by-default + `onlyBuiltDependenciesFile` | **Yes** | Prevention |
 | 2 | Package age gate | pnpm `minimumReleaseAge` (7 days) | **Yes** | Prevention |
 | 3 | Exotic dep blocking | pnpm `blockExoticSubdeps: true` | **Yes** | Prevention |
-| 4 | Dynamic analysis | Socket CLI (`socket pnpm install`) | **Yes** | Prevention |
+| 4 | Dynamic analysis | Socket CLI (advisory in CI; preventive via `socket pnpm install` locally) | Optional | Advisory / Prevention |
 | 5 | Network firewall | Little Snitch / LuLu (recommended, not bundled) | **Yes** | Exfiltration defense |
 | 6 | C2 domain block | `/etc/hosts` (documented below) | **Yes** | Exfiltration defense |
 | 7 | Reactive blocklist | `scripts/blocklist.conf` + guard + pre-commit + CI | Partially | Reactive |

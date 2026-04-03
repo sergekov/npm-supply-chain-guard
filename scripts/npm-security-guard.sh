@@ -83,6 +83,7 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
   fi
 
   # Check node_modules (catches pre-existing stale installs; auto-removes)
+  # npm flat path (direct deps under pnpm also resolve via symlink)
   if [ -f "node_modules/${pkg}/package.json" ]; then
     INSTALLED_VERSION=$(grep -F '"version"' "node_modules/${pkg}/package.json" 2>/dev/null | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
     if [ "$INSTALLED_VERSION" = "$ver" ]; then
@@ -92,6 +93,17 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
       if [ -d "node_modules/.pnpm" ]; then
         find node_modules/.pnpm -maxdepth 1 \( -name "${pkg}@${ver}" -o -name "${pkg}@${ver}(*" \) -type d -exec rm -rf {} + 2>/dev/null || true
       fi
+      exit 1
+    fi
+  fi
+  # pnpm virtual store (transitive deps have no root symlink under isolated linker)
+  if [ -d "node_modules/.pnpm" ]; then
+    PNPM_VER_MATCH=$(find node_modules/.pnpm -maxdepth 1 \( -name "${pkg}@${ver}" -o -name "${pkg}@${ver}(*" \) -type d 2>/dev/null | head -1 || true)
+    if [ -n "$PNPM_VER_MATCH" ]; then
+      echo "SECURITY ALERT: ${pkg}@${ver} is compromised! Found in pnpm virtual store."
+      echo "Removing from node_modules..."
+      rm -rf "node_modules/${pkg}"
+      find node_modules/.pnpm -maxdepth 1 \( -name "${pkg}@${ver}" -o -name "${pkg}@${ver}(*" \) -type d -exec rm -rf {} + 2>/dev/null || true
       exit 1
     fi
   fi
