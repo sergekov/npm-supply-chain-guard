@@ -8,7 +8,7 @@
 #   3. This script — reactive blocklist check (lock files + node_modules)
 #   4. Git pre-commit hook (scripts/git-pre-commit-security.sh)
 #   5. CI workflow (.github/workflows/supply-chain-security-audit.yml)
-#   6. Socket CLI — dynamic dependency analysis
+#   6. Socket CLI — dynamic dependency analysis (advisory in CI)
 #
 # Blocklist defined in scripts/blocklist.conf (single source of truth).
 
