@@ -3,7 +3,7 @@
 # Works with both npm and pnpm lockfile formats.
 #
 # Protection layers:
-#   1. pnpm deny-by-default scripts + allowBuilds (pnpm-workspace.yaml)
+#   1. pnpm deny-by-default scripts + onlyBuiltDependenciesFile (pnpm-workspace.yaml)
 #   2. pnpm minimumReleaseAge — rejects recently-published packages
 #   3. This script — reactive blocklist check (lock files + node_modules)
 #   4. Git pre-commit hook (scripts/git-pre-commit-security.sh)

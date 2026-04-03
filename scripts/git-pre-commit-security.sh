@@ -75,7 +75,7 @@ while IFS= read -r file; do
 
     # Check package.json format — catch any version spec containing the blocked version
     # Covers: exact, =, ^, ~, >=, > prefixes. Does not cover hyphen ranges or compound ranges with spaces.
-    if echo "$STAGED_CONTENT" | grep -qE "\"${pkg}\"[[:space:]]*:[[:space:]]*\"[~^>=]*${ver}\""; then
+    if [[ "$file" != *.yaml ]] && echo "$STAGED_CONTENT" | grep -qE "\"${pkg}\"[[:space:]]*:[[:space:]]*\"[~^>=]*${ver}\""; then
       echo "SECURITY ALERT: Compromised ${pkg}@${ver} referenced in staged file: ${file}"
       echo "Commit rejected. Use a safe version or remove the dependency."
       exit 1

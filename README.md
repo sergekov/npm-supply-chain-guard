@@ -63,6 +63,7 @@ chmod +x your-project/scripts/*.sh
 
 # Merge the package.json scripts into your existing package.json:
 #   "preinstall": "bash scripts/npm-security-guard.sh",
+#   "postinstall": "bash scripts/npm-security-guard.sh",
 #   "prepare": "bash scripts/install-git-hooks.sh",
 #   "security:check": "bash scripts/npm-security-guard.sh",
 #   "security:audit": "pnpm audit --audit-level=critical"
