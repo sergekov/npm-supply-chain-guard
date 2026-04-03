@@ -29,8 +29,8 @@ for pkg in "${BLOCKED_PACKAGES[@]}"; do
     echo "Remove it from your dependencies and regenerate the lock file."
     exit 1
   fi
-  # YAML lockfile: pnpm uses pkg@ver entries; bare match is sufficient
-  if [ -f "pnpm-lock.yaml" ] && grep -Fq "${pkg}" pnpm-lock.yaml 2>/dev/null; then
+  # YAML lockfile: anchor with whitespace prefix and @/: suffix to avoid partial-name matches
+  if [ -f "pnpm-lock.yaml" ] && grep -Eq "(^|[[:space:]])${pkg}[@:]" pnpm-lock.yaml 2>/dev/null; then
     echo "SECURITY ALERT: Blocked package '${pkg}' detected in pnpm-lock.yaml!"
     echo "This package is associated with a known supply chain attack."
     echo "Remove it from your dependencies and regenerate the lock file."
@@ -73,16 +73,16 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
     fi
   fi
 
-  # Check pnpm-lock.yaml format (uses pkg@ver pattern)
+  # Check pnpm-lock.yaml format (uses pkg@ver: as YAML key)
   if [ -f "pnpm-lock.yaml" ]; then
-    if grep -Fq "${pkg}@${ver}" pnpm-lock.yaml 2>/dev/null; then
+    if grep -Fq "${pkg}@${ver}:" pnpm-lock.yaml 2>/dev/null; then
       echo "SECURITY ALERT: ${pkg}@${ver} is compromised! Found in pnpm-lock.yaml."
       echo "Remove or update this dependency to a safe version."
       exit 1
     fi
   fi
 
-  # Check node_modules (catches pre-existing stale installs)
+  # Check node_modules (catches pre-existing stale installs; auto-removes)
   if [ -f "node_modules/${pkg}/package.json" ]; then
     INSTALLED_VERSION=$(grep -F '"version"' "node_modules/${pkg}/package.json" 2>/dev/null | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
     if [ "$INSTALLED_VERSION" = "$ver" ]; then

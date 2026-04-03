@@ -37,9 +37,9 @@ while IFS= read -r file; do
   # Check for fully blocked packages
   for pkg in "${BLOCKED_PACKAGES[@]}"; do
     # JSON files: anchor with double quotes to avoid partial-name false positives
-    # YAML files (pnpm-lock.yaml): bare match is sufficient
+    # YAML files: anchor with whitespace prefix and @/: suffix
     if [[ "$file" == *.yaml ]]; then
-      MATCHED=$(echo "$STAGED_CONTENT" | grep -Fq "${pkg}" && echo "yes" || echo "no")
+      MATCHED=$(echo "$STAGED_CONTENT" | grep -Eq "(^|[[:space:]])${pkg}[@:]" && echo "yes" || echo "no")
     else
       MATCHED=$(echo "$STAGED_CONTENT" | grep -Fq "\"${pkg}\"" && echo "yes" || echo "no")
     fi
@@ -66,8 +66,8 @@ while IFS= read -r file; do
       fi
     fi
 
-    # Check pnpm-lock.yaml format (uses pkg@ver pattern)
-    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Fq "${pkg}@${ver}"; then
+    # Check pnpm-lock.yaml format (uses pkg@ver: as YAML key)
+    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Fq "${pkg}@${ver}:"; then
       echo "SECURITY ALERT: Compromised ${pkg}@${ver} found in staged file: ${file}"
       echo "Commit rejected. Use a safe version or remove the dependency."
       exit 1
