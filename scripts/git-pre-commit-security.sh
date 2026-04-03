@@ -67,7 +67,7 @@ while IFS= read -r file; do
     fi
 
     # Check pnpm-lock.yaml format (pkg@ver: in packages, pkg@ver(peer): in snapshots)
-    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Eq "${pkg}@${ver}[:(]"; then
+    if [[ "$file" == *.yaml ]] && echo "$STAGED_CONTENT" | grep -Eq "(^|[[:space:]])${pkg}@${ver}[:(]"; then
       echo "SECURITY ALERT: Compromised ${pkg}@${ver} found in staged file: ${file}"
       echo "Commit rejected. Use a safe version or remove the dependency."
       exit 1

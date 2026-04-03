@@ -77,7 +77,7 @@ jobs:
             for entry in "${BLOCKED_VERSIONS[@]}"; do
               pkg="${entry%%:*}"
               ver="${entry##*:}"
-              if grep -Eq "${pkg}@${ver}[:(]" pnpm-lock.yaml; then
+              if grep -Eq "(^|[[:space:]])${pkg}@${ver}[:(]" pnpm-lock.yaml; then
                 echo "::error::SECURITY: Compromised ${pkg}@${ver} found in pnpm-lock.yaml!"
                 exit 1
               fi

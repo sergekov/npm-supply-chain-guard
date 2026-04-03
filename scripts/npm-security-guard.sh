@@ -75,7 +75,7 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
 
   # Check pnpm-lock.yaml format (pkg@ver: in packages, pkg@ver(peer): in snapshots)
   if [ -f "pnpm-lock.yaml" ]; then
-    if grep -Eq "${pkg}@${ver}[:(]" pnpm-lock.yaml 2>/dev/null; then
+    if grep -Eq "(^|[[:space:]])${pkg}@${ver}[:(]" pnpm-lock.yaml 2>/dev/null; then
       echo "SECURITY ALERT: ${pkg}@${ver} is compromised! Found in pnpm-lock.yaml."
       echo "Remove or update this dependency to a safe version."
       exit 1
@@ -90,7 +90,7 @@ for entry in "${BLOCKED_VERSIONS[@]}"; do
       echo "Removing from node_modules..."
       rm -rf "node_modules/${pkg}"
       if [ -d "node_modules/.pnpm" ]; then
-        find node_modules/.pnpm -maxdepth 1 -name "${pkg}@${ver}*" -type d -exec rm -rf {} + 2>/dev/null || true
+        find node_modules/.pnpm -maxdepth 1 \( -name "${pkg}@${ver}" -o -name "${pkg}@${ver}(*" \) -type d -exec rm -rf {} + 2>/dev/null || true
       fi
       exit 1
     fi
