@@ -1,0 +1,129 @@
+name: Supply Chain Security Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.onlyBuiltDependencies.json'
+      - '.npmrc'
+      - 'scripts/**'
+      - '.github/workflows/supply-chain-security-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.onlyBuiltDependencies.json'
+      - '.npmrc'
+      - 'scripts/**'
+      - '.github/workflows/supply-chain-security-audit.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    # If your project has multiple package directories, list them here.
+    strategy:
+      matrix:
+        directory:
+          - .
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads version from packageManager field in package.json.
+      # If your project lacks packageManager, add: version: 10
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Check for package.json
+        id: check
+        run: |
+          if [ -f "${{ matrix.directory }}/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for blocked packages in lock files
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ${{ matrix.directory }}
+        run: |
+          # Source shared blocklist (single source of truth)
+          source "${GITHUB_WORKSPACE}/scripts/blocklist.conf"
+
+          # Warn if no lock file exists — downstream --frozen-lockfile will fail,
+          # but the security check itself should not silently pass.
+          if [ ! -f "pnpm-lock.yaml" ] && [ ! -f "package-lock.json" ]; then
+            echo "::warning::No lock file found — lock file security check skipped."
+            exit 0
+          fi
+
+          # Check pnpm-lock.yaml
+          if [ -f "pnpm-lock.yaml" ]; then
+            for pkg in "${BLOCKED_PACKAGES[@]}"; do
+              if grep -Eq "(^|[[:space:]])${pkg}[@:]" pnpm-lock.yaml; then
+                echo "::error::SECURITY: Blocked package '${pkg}' found in pnpm-lock.yaml!"
+                exit 1
+              fi
+            done
+            for entry in "${BLOCKED_VERSIONS[@]}"; do
+              pkg="${entry%%:*}"
+              ver="${entry##*:}"
+              if grep -Eq "(^|[[:space:]])${pkg}@${ver}[:(]" pnpm-lock.yaml; then
+                echo "::error::SECURITY: Compromised ${pkg}@${ver} found in pnpm-lock.yaml!"
+                exit 1
+              fi
+            done
+          fi
+
+          # Check package-lock.json (npm fallback)
+          if [ -f "package-lock.json" ]; then
+            for pkg in "${BLOCKED_PACKAGES[@]}"; do
+              if grep -Fq "\"${pkg}\"" package-lock.json; then
+                echo "::error::SECURITY: Blocked package '${pkg}' found in package-lock.json!"
+                exit 1
+              fi
+            done
+            for entry in "${BLOCKED_VERSIONS[@]}"; do
+              pkg="${entry%%:*}"
+              ver="${entry##*:}"
+              if grep -Fq "\"node_modules/${pkg}\"" package-lock.json; then
+                if grep -FA3 "\"node_modules/${pkg}\"" package-lock.json | grep -Fq "\"version\": \"${ver}\""; then
+                  echo "::error::SECURITY: Compromised ${pkg}@${ver} found in package-lock.json!"
+                  exit 1
+                fi
+              fi
+            done
+          fi
+
+          echo "No blocked packages found in lock files."
+
+      - name: Install dependencies
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ${{ matrix.directory }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Post-install security scan
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ${{ matrix.directory }}
+        run: bash "${GITHUB_WORKSPACE}/scripts/npm-security-guard.sh"
+
+      - name: pnpm audit (critical vulnerabilities)
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ${{ matrix.directory }}
+        run: pnpm audit --audit-level=critical
+
+      - name: Socket CLI security analysis
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ${{ matrix.directory }}
+        continue-on-error: true
+        run: npx @socketsecurity/cli@1.1.78 report create --view
